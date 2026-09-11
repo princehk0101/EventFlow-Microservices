@@ -1,0 +1,84 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: microservices-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: microservices_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  nats:
+    image: nats:2.11-alpine
+    container_name: microservices-nats
+    restart: unless-stopped
+
+    command:
+      - "-js"
+      - "-m"
+      - "8222"
+
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  user-service:
+    build: ./user-service
+    container_name: microservices-user-service
+    restart: unless-stopped
+
+    environment:
+      DB_NAME: microservices_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres_password
+      DB_HOST: postgres
+      DB_PORT: 5432
+      NATS_URL: nats://nats:4222
+      SECRET_KEY: ${USER_SECRET_KEY}
+
+    ports:
+      - "8001:8000"
+
+    depends_on:
+      - postgres
+      - nats
+
+  notification-service:
+    build: ./notification-service
+    container_name: microservices-notification-service
+    restart: unless-stopped
+
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      NATS_URL: nats://nats:4222
+
+    ports:
+      - "8002:8000"
+
+    depends_on:
+      - nats
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: microservices-api-gateway
+    restart: unless-stopped
+
+    environment:
+      USER_SERVICE_URL: http://user-service:8000
+
+    ports:
+      - "8003:8000"
+
+    depends_on:
+      - user-service
+
+volumes:
+  postgres_data:
